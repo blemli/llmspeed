@@ -108,14 +108,17 @@ def arena():
 def speeds():
     """artificial analysis free api, by normalized name: median output tokens/s and intelligence index. needs AA_KEY."""
     out, page = {}, 1
-    while AA:
-        j = requests.get("https://artificialanalysis.ai/api/v2/language/models/free", params={"page": page}, headers={"x-api-key": AA}, timeout=60).json()
-        for m in j.get("data", []):
-            out.setdefault(norm(re.sub(r"\(.*?\)", "", m["name"])), dict(tps=(m.get("performance") or {}).get("median_output_tokens_per_second"),
-                                                                       ii=(m.get("evaluations") or {}).get("artificial_analysis_intelligence_index")))
-        if not j.get("pagination", {}).get("has_more"):
-            break
-        page += 1
+    try:
+        while AA:
+            j = requests.get("https://artificialanalysis.ai/api/v2/language/models/free", params={"page": page}, headers={"x-api-key": AA}, timeout=60).json()
+            for m in j.get("data", []):
+                out.setdefault(norm(re.sub(r"\(.*?\)", "", m["name"])), dict(tps=(m.get("performance") or {}).get("median_output_tokens_per_second"),
+                                                                           ii=(m.get("evaluations") or {}).get("artificial_analysis_intelligence_index")))
+            if not j.get("pagination", {}).get("has_more"):
+                break
+            page += 1
+    except Exception as e:
+        logging.warning(f"aa: {e}")
     return out
 
 
