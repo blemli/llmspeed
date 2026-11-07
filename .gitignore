@@ -12,3 +12,4 @@ __pycache__/
 *.gif
 *.ico
 *.webp
+.playwright-mcp/
