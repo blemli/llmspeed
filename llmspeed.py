@@ -8,7 +8,7 @@ SMTP = {k: os.environ.get("SMTP_" + k) for k in ("HOST", "USER", "PASS")}
 URL = os.environ.get("URL", "https://llmspeed.problem.li")
 AA = os.environ.get("AA_KEY", "").strip() or None  # artificialanalysis.ai free data api key - without it there is no data
 W, H, L, R, T, B = 960, 540, 44, 16, 14, 34  # chart box
-MSG = dict(inbox="check your inbox", bad="that is not a mail address", ok="subscribed - you get a mail when a new model appears", bye="unsubscribed")
+MSG = dict(inbox="check your inbox", bad="that is not a mail address", ok="watching - you get a mail when a new model lands inside", bye="stopped watching")
 
 app = flask.Flask(__name__, template_folder=".")
 app.wsgi_app = werkzeug.middleware.proxy_fix.ProxyFix(app.wsgi_app, x_for=1, x_proto=1)  # kamal-proxy in front: rate limit per client, not per proxy
@@ -21,8 +21,8 @@ logging.info("boot")
 def db():
     c = sqlite3.connect(DB, isolation_level=None)
     c.executescript("create table if not exists kv(k text primary key, v text, ts real);"
-                    "create table if not exists subs(email text primary key, token text, ok int, ts real);"
-                    "create table if not exists seen(id text primary key, ts real)")
+                    "create table if not exists watch(token text primary key, email text, ok int, name text, tps0 real, tps1 real, ii0 real, ii1 real, ts real);"
+                    "create table if not exists seen(id text primary key, ts real); drop table if exists subs")
     return c
 
 
@@ -150,13 +150,23 @@ def mail(to, subject, body):
         s.send_message(m)
 
 
+def inside(w, r):
+    return w["tps0"] <= r["tps"] <= w["tps1"] and w["ii0"] <= (r["ii"] or 0) <= w["ii1"]
+
+
+def line(r):
+    return f"- {r['name']} ({r['creator']}{', open weights' if r['hf'] else ''}): {r['tps']:.0f} tokens/s, intelligence {r['ii'] if r['ii'] is not None else '?'}"
+
+
 def notify(new):
-    lines = "\n".join(f"- {r['name']} ({r['creator']}{', open weights' if r['hf'] else ''}): {r['tps']:.0f} tokens/s" for r in new)
-    for e, t in db().execute("select email, token from subs where ok=1"):
-        try:
-            mail(e, f"llmspeed: {len(new)} new model{'s' if len(new) > 1 else ''}", f"new on {URL}:\n\n{lines}\n\nunsubscribe: {URL}/bye/{t}")
-        except Exception as x:
-            logging.error(f"mail @{e.split('@')[-1]}: {x}")
+    """every confirmed watcher whose region a new model landed in gets one mail"""
+    for t, e, name, tps0, tps1, ii0, ii1 in db().execute("select token, email, name, tps0, tps1, ii0, ii1 from watch where ok=1").fetchall():
+        hits = [r for r in new if inside(dict(tps0=tps0, tps1=tps1, ii0=ii0, ii1=ii1), r)]
+        if hits:
+            try:
+                mail(e, f"llmspeed: {len(hits)} new in {name}", f"new inside '{name}' on {URL}:\n\n" + "\n".join(map(line, hits)) + f"\n\nstop watching: {URL}/bye/{t}")
+            except Exception as x:
+                logging.error(f"mail @{e.split('@')[-1]}: {x}")
 
 
 def loop():
@@ -180,23 +190,23 @@ def rows():
     return sorted(ms, key=lambda r: -(r["ii"] if r["ii"] is not None else -1))
 
 
-def chart(rs, dots):
+def chart(rs, regions):
     """x = log10 tokens/s, y = intelligence index, unrated models sit on the x axis. labels on the pareto front: fast and smart."""
-    pts = rs + dots
-    xs = [math.log10(p["tps"]) for p in pts] or [1, 3]
+    xs = [math.log10(p["tps"]) for p in rs] + [math.log10(v) for w in regions for v in (w["tps0"], w["tps1"])] or [1, 3]
     x0, x1 = math.floor(min(xs)), round(max(xs) + 0.08, 2)  # left edge a decade, right edge just past the fastest model
-    y1 = min(100, 10 * math.ceil((max([p["ii"] or 0 for p in pts] + [50]) + 8) / 10))
-    for p in pts:
-        p["cx"] = round(L + (math.log10(p["tps"]) - x0) / (x1 - x0) * (W - L - R), 1)
-        p["cy"] = round(H - B - (p["ii"] or 0) / y1 * (H - T - B), 1)
-        p["r"] = 6
+    y1 = min(100, 10 * math.ceil((max([p["ii"] or 0 for p in rs] + [w["ii1"] for w in regions] + [50]) + 8) / 10))
+    X, Y = lambda v: round(L + (math.log10(v) - x0) / (x1 - x0) * (W - L - R), 1), lambda v: round(H - B - v / y1 * (H - T - B), 1)
+    for p in rs:
+        p["cx"], p["cy"], p["r"] = X(p["tps"]), Y(p["ii"] or 0), 6
+    for w in regions:
+        w["x"], w["y"], w["w"], w["h"] = X(w["tps0"]), Y(w["ii1"]), round(X(w["tps1"]) - X(w["tps0"]), 1), round(Y(w["ii0"]) - Y(w["ii1"]), 1)
     best = -1
     for p in sorted(rs, key=lambda p: -p["tps"]):  # fast first
         p["label"] = p["ii"] is None or p["ii"] > best or p.get("extra")
         best = max(best, p["ii"] or -1)
-    boxes = []  # label slots: right of the dot, else below, else above, else no label. your own dots always get one.
-    for p in dots + sorted((p for p in rs if p["label"]), key=lambda p: -(p["ii"] or 0)):
-        w, p["label"] = 5.5 * len(p["name"]) + 4, p in dots
+    boxes = []  # label slots: right of the dot, else below, else above, else no label
+    for p in sorted((p for p in rs if p["label"]), key=lambda p: -(p["ii"] or 0)):
+        w, p["label"] = 5.5 * len(p["name"]) + 4, False
         for dy in (4, 15, -8):
             x, y = p["cx"] + p["r"] + 2, p["cy"] + dy
             x = x if x + w < W - R else p["cx"] - p["r"] - 2 - w
@@ -204,19 +214,19 @@ def chart(rs, dots):
                 p["lx"], p["ly"], p["label"] = round(x, 1), round(y, 1), True
                 boxes.append((x, y - 9, x + w, y + 2))
                 break
-        p.setdefault("lx", round(p["cx"] + p["r"] + 2, 1)), p.setdefault("ly", round(p["cy"] + 4, 1))
     fams = {}
     for p in rs:
         if p["ii"] is not None:
             fams.setdefault(p["family"], []).append(p)
     lines = [("#2a9d3f" if g[0]["hf"] else "#e01b24", " ".join(f"{p['cx']},{p['cy']}" for p in sorted(g, key=lambda p: p["cx"]))) for g in fams.values() if len(g) > 1]
-    return dict(x0=x0, x1=x1, y1=y1, lines=lines, xt=[(f"{10 ** e:,}", round(L + (e - x0) / (x1 - x0) * (W - L - R), 1)) for e in range(x0, math.floor(x1) + 1)],
-                yt=[(v, round(H - B - v / y1 * (H - T - B), 1)) for v in range(0, y1 + 1, 10 if y1 <= 60 else 20)])
+    return dict(x0=x0, x1=x1, y1=y1, lines=lines, xt=[(f"{10 ** e:,}", X(10 ** e)) for e in range(x0, math.floor(x1) + 1)],
+                yt=[(v, Y(v)) for v in range(0, y1 + 1, 10 if y1 <= 60 else 20)])
 
 
-def cookie_dots():
+def cookie_regions():
     try:
-        return [dict(name=str(d["name"])[:30], ii=min(100.0, max(0.0, float(d["ii"]))), tps=max(0.1, float(d["tps"]))) for d in json.loads(flask.request.cookies.get("dots", "[]"))][:20]
+        return [dict(t=str(w["t"])[:40], name=str(w["name"])[:30], tps0=max(0.1, float(w["tps0"])), tps1=max(0.1, float(w["tps1"])), ii0=max(0.0, float(w["ii0"])), ii1=min(100.0, float(w["ii1"])))
+                for w in json.loads(flask.request.cookies.get("regions", "[]"))][:10]
     except (ValueError, TypeError, KeyError):
         return []
 
@@ -231,49 +241,47 @@ def same_origin():
 @app.route("/")
 @limiter.limit("70/minute, 1000/hour")
 def index():
-    rs, dots = [dict(r) for r in rows()], cookie_dots()
-    return flask.render_template("llmspeed.html", cfg=CFG, rs=rs, dots=dots, g=chart(rs, dots), msg=MSG.get(flask.request.args.get("m")), age=kv("models")[1],
+    rs, regions = [dict(r) for r in rows()], cookie_regions()
+    return flask.render_template("llmspeed.html", cfg=CFG, rs=rs, regions=regions, g=chart(rs, regions), msg=MSG.get(flask.request.args.get("m")), age=kv("models")[1],
                                  W=W, H=H, L=L, R=R, T=T, B=B)
 
 
-@app.post("/dot")
-@limiter.limit("30/minute")
-def dot():
-    f, resp = flask.request.form, flask.redirect("/")
-    if f.get("clear"):
-        resp.delete_cookie("dots")
-        return resp
-    try:
-        dots = cookie_dots() + [dict(name=f["name"][:30], ii=min(100.0, max(0.0, float(f["ii"]))), tps=max(0.1, float(f["tps"])))]
-    except (KeyError, ValueError):
-        flask.abort(400)
-    resp.set_cookie("dots", json.dumps(dots[-20:]), max_age=365 * 86400, samesite="Lax")
-    return resp
-
-
-@app.post("/subscribe")
+@app.post("/watch")
 @limiter.limit("5/hour")
-def subscribe():
-    e = flask.request.form.get("email", "").strip().lower()
+def watch():
+    """a region of the chart + a mail address: double opt-in, then a mail whenever a new model lands inside"""
+    f, resp = flask.request.form, flask.redirect("/?m=inbox")
+    if f.get("clear"):
+        db().executemany("delete from watch where token=?", [(w["t"],) for w in cookie_regions()])
+        resp = flask.redirect("/")
+        resp.delete_cookie("regions")
+        return resp
+    e = f.get("email", "").strip().lower()
     if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", e):
         return flask.redirect("/?m=bad")
-    c = db()
-    c.execute("insert or ignore into subs values(?,?,0,?)", (e, secrets.token_urlsafe(16), time.time()))
-    t, = c.execute("select token from subs where email=?", (e,)).fetchone()
-    mail(e, "llmspeed: confirm", f"click to get a mail whenever a new model shows up on {URL}:\n\n{URL}/ok/{t}\n\nnot you? just ignore this.")
-    logging.info(f"subscribe @{e.split('@')[1]}")
-    return flask.redirect("/?m=inbox")
+    try:
+        a, b, c, d = (float(f[k]) for k in ("tps0", "tps1", "ii0", "ii1"))
+    except (KeyError, ValueError):
+        flask.abort(400)
+    w = dict(t=secrets.token_urlsafe(16), name=f.get("name", "").strip()[:30] or "my region", tps0=max(0.1, min(a, b)), tps1=max(0.1, a, b), ii0=max(0.0, min(c, d)), ii1=min(100.0, max(c, d)))
+    db().execute("insert into watch values(?,?,0,?,?,?,?,?,?)", (w["t"], e, w["name"], w["tps0"], w["tps1"], w["ii0"], w["ii1"], time.time()))
+    now = [r for r in rows() if inside(w, r)]
+    mail(e, "llmspeed: confirm", f"click to get a mail whenever a new model lands inside '{w['name']}' ({w['tps0']:g}-{w['tps1']:g} tokens/s, intelligence {w['ii0']:g}-{w['ii1']:g}) on {URL}:\n\n"
+         f"{URL}/ok/{w['t']}\n\ninside right now:\n" + ("\n".join(map(line, now)) or "- nothing yet") + "\n\nnot you? just ignore this.")
+    logging.info(f"watch @{e.split('@')[1]}: {w['name']}, {len(now)} inside")
+    resp.set_cookie("regions", json.dumps((cookie_regions() + [w])[-10:]), max_age=365 * 86400, samesite="Lax")
+    return resp
 
 
 @app.route("/ok/<t>")
 def ok(t):
-    db().execute("update subs set ok=1 where token=?", (t,))
+    db().execute("update watch set ok=1 where token=?", (t,))
     return flask.redirect("/?m=ok")
 
 
 @app.route("/bye/<t>")
 def bye(t):
-    db().execute("delete from subs where token=?", (t,))
+    db().execute("delete from watch where token=?", (t,))
     return flask.redirect("/?m=bye")
 
 
