@@ -162,7 +162,8 @@ def _refresh():
         notify(new)
     kv("models", list(models.values()))
     cache.clear()
-    logging.info(f"refresh: {len(models)} models, {sum(1 for r in models.values() if r['gpu'])} on cards, {len(new)} new, {len(slugs)} arena slugs, {len(aa)} aa")
+    logging.info(f"refresh: {len(models)} models, {sum(1 for r in models.values() if r['gpu'])} on cards, {len(new)} new, {len(slugs)} arena slugs, "
+                 f"{len(aa)} aa -> {sum(1 for r in models.values() if r['tps'])} with speed")
 
 
 def mail(to, subject, body):
