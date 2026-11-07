@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """llmfind - which llm? accuracy (y) vs cost (x), dot size = speed. red = api, green = open weights, priced by graphics card write-off."""
-import email.message, flask, flask_caching, flask_limiter, flask_limiter.util as util, json, logging, logli, math, os, re, requests, secrets, smtplib, sqlite3, threading, time, yaml
+import email.message, flask, flask_caching, flask_limiter, flask_limiter.util as util, json, logging, logli, math, os, re, requests, secrets, smtplib, sqlite3, threading, time, urllib.parse, werkzeug.middleware.proxy_fix, yaml
 
 CFG = yaml.safe_load(open("llmfind.yaml"))
 DB = os.environ.get("DB", "/data/llmfind.db" if os.path.isdir("/data") else "llmfind.db")
@@ -9,7 +9,10 @@ URL = os.environ.get("URL", "https://llmfind.problem.li")
 AA = os.environ.get("AA_KEY", "").strip() or None  # optional artificialanalysis.ai key: speed (dot size) + missing intelligence indices
 W, H, L, R, T, B = 960, 540, 44, 16, 14, 34  # chart box
 
+MSG = dict(inbox="check your inbox", bad="that is not a mail address", ok="subscribed - you get a mail when a new model appears", bye="unsubscribed")
+
 app = flask.Flask(__name__, template_folder=".")
+app.wsgi_app = werkzeug.middleware.proxy_fix.ProxyFix(app.wsgi_app, x_for=1, x_proto=1)  # kamal-proxy in front: rate limit per client, not per proxy
 logli.setup("llmfind")
 cache = flask_caching.Cache(app, config={"CACHE_TYPE": "SimpleCache"})
 limiter = flask_limiter.Limiter(key_func=util.get_remote_address, app=app, storage_uri="memory://")
@@ -180,7 +183,7 @@ def notify(new):
         try:
             mail(e, f"llmfind: {len(new)} new model{'s' if len(new) > 1 else ''}", f"new on {URL}:\n\n{lines}\n\nunsubscribe: {URL}/bye/{t}")
         except Exception as x:
-            logging.error(f"mail {e}: {x}")
+            logging.error(f"mail @{e.split('@')[1]}: {x}")
 
 
 def loop():
@@ -240,9 +243,17 @@ def chart(rs, dots):
 
 def cookie_dots():
     try:
-        return [d for d in json.loads(flask.request.cookies.get("dots", "[]")) if "acc" in d and "cost" in d][:20]
-    except ValueError:
+        return [dict(s=str(d["s"]), name=str(d["name"])[:30], acc=min(100.0, max(0.0, float(d["acc"]))), cost=max(1e-4, float(d["cost"])), tps=float(d["tps"]) if d.get("tps") else None)
+                for d in json.loads(flask.request.cookies.get("dots", "[]"))][:20]
+    except (ValueError, TypeError, KeyError):
         return []
+
+
+@app.before_request
+def same_origin():
+    o = flask.request.origin
+    if flask.request.method == "POST" and o and urllib.parse.urlparse(o).netloc != flask.request.host:
+        flask.abort(403)
 
 
 @app.route("/")
@@ -253,7 +264,7 @@ def index(s="chat"):
         flask.abort(404)
     rs, dots = [dict(r) for r in rows(s)], [d for d in cookie_dots() if d.get("s") == s]
     return flask.render_template("llmfind.html", s=s, sc=CFG["scenarios"][s], cfg=CFG, rs=rs, dots=dots, g=chart(rs, dots), hour=hour,
-                                 msg=flask.request.args.get("m"), age=kv("models")[1], W=W, H=H, L=L, R=R, T=T, B=B)
+                                 msg=MSG.get(flask.request.args.get("m")), age=kv("models")[1], W=W, H=H, L=L, R=R, T=T, B=B)
 
 
 @app.post("/dot")
@@ -266,7 +277,7 @@ def dot():
         resp.delete_cookie("dots")
         return resp
     try:
-        dots = cookie_dots() + [dict(s=s, name=f["name"][:30], acc=min(100, max(0, float(f["acc"]))), cost=max(1e-4, float(f["cost"])), tps=float(f["tps"]) if f.get("tps") else None)]
+        dots = cookie_dots() + [dict(s=s, name=f["name"][:30], acc=min(100.0, max(0.0, float(f["acc"]))), cost=max(1e-4, float(f["cost"])), tps=float(f["tps"]) if f.get("tps") else None)]
     except (KeyError, ValueError):
         flask.abort(400)
     resp.set_cookie("dots", json.dumps(dots[-20:]), max_age=365 * 86400, samesite="Lax")
@@ -276,27 +287,28 @@ def dot():
 @app.post("/subscribe")
 @limiter.limit("5/hour")
 def subscribe():
-    e, s = flask.request.form.get("email", "").strip().lower(), flask.request.form.get("s", "chat")
+    e, s = flask.request.form.get("email", "").strip().lower(), flask.request.form.get("s")
+    s = s if s in CFG["scenarios"] else "chat"
     if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", e):
-        return flask.redirect(f"/{s}?m=that is not a mail address")
+        return flask.redirect(f"/{s}?m=bad")
     c = db()
     c.execute("insert or ignore into subs values(?,?,0,?)", (e, secrets.token_urlsafe(16), time.time()))
     t, = c.execute("select token from subs where email=?", (e,)).fetchone()
     mail(e, "llmfind: confirm", f"click to get a mail whenever a new model shows up on {URL}:\n\n{URL}/ok/{t}\n\nnot you? just ignore this.")
-    logging.info(f"subscribe {e}")
-    return flask.redirect(f"/{s}?m=check your inbox")
+    logging.info(f"subscribe @{e.split('@')[1]}")
+    return flask.redirect(f"/{s}?m=inbox")
 
 
 @app.route("/ok/<t>")
 def ok(t):
     db().execute("update subs set ok=1 where token=?", (t,))
-    return flask.redirect("/chat?m=subscribed - you get a mail when a new model appears")
+    return flask.redirect("/chat?m=ok")
 
 
 @app.route("/bye/<t>")
 def bye(t):
     db().execute("delete from subs where token=?", (t,))
-    return flask.redirect("/chat?m=unsubscribed")
+    return flask.redirect("/chat?m=bye")
 
 
 @app.route("/favicon.svg")
