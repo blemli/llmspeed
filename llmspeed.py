@@ -184,7 +184,7 @@ def chart(rs, dots):
     """x = log10 tokens/s, y = intelligence index, unrated models sit on the x axis. labels on the pareto front: fast and smart."""
     pts = rs + dots
     xs = [math.log10(p["tps"]) for p in pts] or [1, 3]
-    x0, x1 = math.floor(min(xs)), math.ceil(max(xs) + 0.2)
+    x0, x1 = math.floor(min(xs)), round(max(xs) + 0.08, 2)  # left edge a decade, right edge just past the fastest model
     y1 = min(100, 10 * math.ceil((max([p["ii"] or 0 for p in pts] + [50]) + 8) / 10))
     for p in pts:
         p["cx"] = round(L + (math.log10(p["tps"]) - x0) / (x1 - x0) * (W - L - R), 1)
@@ -210,7 +210,7 @@ def chart(rs, dots):
         if p["ii"] is not None:
             fams.setdefault(p["family"], []).append(p)
     lines = [("#2a9d3f" if g[0]["hf"] else "#e01b24", " ".join(f"{p['cx']},{p['cy']}" for p in sorted(g, key=lambda p: p["cx"]))) for g in fams.values() if len(g) > 1]
-    return dict(x0=x0, x1=x1, y1=y1, lines=lines, xt=[(f"{10 ** e:,}", round(L + (e - x0) / (x1 - x0) * (W - L - R), 1)) for e in range(x0, x1 + 1)],
+    return dict(x0=x0, x1=x1, y1=y1, lines=lines, xt=[(f"{10 ** e:,}", round(L + (e - x0) / (x1 - x0) * (W - L - R), 1)) for e in range(x0, math.floor(x1) + 1)],
                 yt=[(v, round(H - B - v / y1 * (H - T - B), 1)) for v in range(0, y1 + 1, 10 if y1 <= 60 else 20)])
 
 
