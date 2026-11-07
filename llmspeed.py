@@ -264,7 +264,7 @@ def watch():
         a, b, c, d = (float(f[k]) for k in ("tps0", "tps1", "ii0", "ii1"))
     except (KeyError, ValueError):
         flask.abort(400)
-    t, w = secrets.token_urlsafe(16), dict(h=secrets.token_urlsafe(16), name=f.get("name", "").strip()[:30] or "my region", tps0=max(0.1, min(a, b)), tps1=max(0.1, a, b), ii0=max(0.0, min(c, d)), ii1=min(100.0, max(c, d)))
+    t, w = secrets.token_urlsafe(16), dict(h=secrets.token_urlsafe(16), name=re.sub(r"[^A-Za-z0-9 -]", "", f.get("name", ""))[:30].strip() or "my region", tps0=max(0.1, min(a, b)), tps1=max(0.1, a, b), ii0=max(0.0, min(c, d)), ii1=min(100.0, max(c, d)))
     db().execute("insert into region values(?,?,?,0,?,?,?,?,?,?)", (t, w["h"], e, w["name"], w["tps0"], w["tps1"], w["ii0"], w["ii1"], time.time()))
     now = [r for r in rows() if inside(w, r)]
     mail(e, "llmspeed: confirm", f"click to get a mail whenever a new model lands inside '{w['name']}' ({w['tps0']:g}-{w['tps1']:g} tokens/s, intelligence {w['ii0']:g}-{w['ii1']:g}) on {URL}:\n\n"
