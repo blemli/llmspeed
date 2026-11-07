@@ -1,0 +1,9 @@
+.git
+.venv
+.kamal
+.env
+__pycache__
+*.sqlite
+*.db
+README.md
+gig

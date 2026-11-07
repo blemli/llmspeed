@@ -1,0 +1,34 @@
+service: llmfind
+image: blemli/llmfind
+servers:
+  web:
+    hosts:
+      - 185.66.109.77
+proxy:
+  ssl: true
+  host: llmfind.problem.li
+  app_port: 8080
+registry:
+  server: localhost:5555
+env:
+  clear:
+    SMTP_HOST: server59.hostfactory.ch
+    SMTP_USER: log@problem.li
+  secret:
+    - LOGLI_SECRET
+    - SMTP_PASS
+    - AA_KEY
+volumes:
+  - "llmfind_data:/data"
+builder:
+  arch:
+    - amd64
+  remote: ssh://webhost
+ssh:
+  config: true
+  port: 2022
+  user: deploy
+aliases:
+  apps: server exec docker exec kamal-proxy kamal-proxy list
+  ssh: app exec -i sh
+  refresh: app exec 'python -c "import llmfind; llmfind.refresh(force=True)"'
