@@ -21,8 +21,8 @@ logging.info("boot")
 def db():
     c = sqlite3.connect(DB, isolation_level=None)
     c.executescript("create table if not exists kv(k text primary key, v text, ts real);"
-                    "create table if not exists watch(token text primary key, email text, ok int, name text, tps0 real, tps1 real, ii0 real, ii1 real, ts real);"
-                    "create table if not exists seen(id text primary key, ts real); drop table if exists subs")
+                    "create table if not exists region(token text primary key, handle text, email text, ok int, name text, tps0 real, tps1 real, ii0 real, ii1 real, ts real);"
+                    "create table if not exists seen(id text primary key, ts real); drop table if exists subs; drop table if exists watch")
     return c
 
 
@@ -160,7 +160,7 @@ def line(r):
 
 def notify(new):
     """every confirmed watcher whose region a new model landed in gets one mail"""
-    for t, e, name, tps0, tps1, ii0, ii1 in db().execute("select token, email, name, tps0, tps1, ii0, ii1 from watch where ok=1").fetchall():
+    for t, e, name, tps0, tps1, ii0, ii1 in db().execute("select token, email, name, tps0, tps1, ii0, ii1 from region where ok=1").fetchall():
         hits = [r for r in new if inside(dict(tps0=tps0, tps1=tps1, ii0=ii0, ii1=ii1), r)]
         if hits:
             try:
@@ -225,7 +225,7 @@ def chart(rs, regions):
 
 def cookie_regions():
     try:
-        return [dict(t=str(w["t"])[:40], name=str(w["name"])[:30], tps0=max(0.1, float(w["tps0"])), tps1=max(0.1, float(w["tps1"])), ii0=max(0.0, float(w["ii0"])), ii1=min(100.0, float(w["ii1"])))
+        return [dict(h=str(w["h"])[:40], name=str(w["name"])[:30], tps0=max(0.1, float(w["tps0"])), tps1=max(0.1, float(w["tps1"])), ii0=max(0.0, float(w["ii0"])), ii1=min(100.0, float(w["ii1"])))
                 for w in json.loads(flask.request.cookies.get("regions", "[]"))][:10]
     except (ValueError, TypeError, KeyError):
         return []
@@ -249,10 +249,11 @@ def index():
 @app.post("/watch")
 @limiter.limit("5/hour")
 def watch():
-    """a region of the chart + a mail address: double opt-in, then a mail whenever a new model lands inside"""
+    """a region of the chart + a mail address: double opt-in, then a mail whenever a new model lands inside.
+    the confirm/stop token travels only by mail; the cookie gets a separate handle, good for nothing but clearing."""
     f, resp = flask.request.form, flask.redirect("/?m=inbox")
     if f.get("clear"):
-        db().executemany("delete from watch where token=?", [(w["t"],) for w in cookie_regions()])
+        db().executemany("delete from region where handle=?", [(w["h"],) for w in cookie_regions()])
         resp = flask.redirect("/")
         resp.delete_cookie("regions")
         return resp
@@ -263,11 +264,11 @@ def watch():
         a, b, c, d = (float(f[k]) for k in ("tps0", "tps1", "ii0", "ii1"))
     except (KeyError, ValueError):
         flask.abort(400)
-    w = dict(t=secrets.token_urlsafe(16), name=f.get("name", "").strip()[:30] or "my region", tps0=max(0.1, min(a, b)), tps1=max(0.1, a, b), ii0=max(0.0, min(c, d)), ii1=min(100.0, max(c, d)))
-    db().execute("insert into watch values(?,?,0,?,?,?,?,?,?)", (w["t"], e, w["name"], w["tps0"], w["tps1"], w["ii0"], w["ii1"], time.time()))
+    t, w = secrets.token_urlsafe(16), dict(h=secrets.token_urlsafe(16), name=f.get("name", "").strip()[:30] or "my region", tps0=max(0.1, min(a, b)), tps1=max(0.1, a, b), ii0=max(0.0, min(c, d)), ii1=min(100.0, max(c, d)))
+    db().execute("insert into region values(?,?,?,0,?,?,?,?,?,?)", (t, w["h"], e, w["name"], w["tps0"], w["tps1"], w["ii0"], w["ii1"], time.time()))
     now = [r for r in rows() if inside(w, r)]
     mail(e, "llmspeed: confirm", f"click to get a mail whenever a new model lands inside '{w['name']}' ({w['tps0']:g}-{w['tps1']:g} tokens/s, intelligence {w['ii0']:g}-{w['ii1']:g}) on {URL}:\n\n"
-         f"{URL}/ok/{w['t']}\n\ninside right now:\n" + ("\n".join(map(line, now)) or "- nothing yet") + "\n\nnot you? just ignore this.")
+         f"{URL}/ok/{t}\n\ninside right now:\n" + ("\n".join(map(line, now)) or "- nothing yet") + "\n\nnot you? just ignore this.")
     logging.info(f"watch @{e.split('@')[1]}: {w['name']}, {len(now)} inside")
     resp.set_cookie("regions", json.dumps((cookie_regions() + [w])[-10:]), max_age=365 * 86400, samesite="Lax")
     return resp
@@ -275,13 +276,13 @@ def watch():
 
 @app.route("/ok/<t>")
 def ok(t):
-    db().execute("update watch set ok=1 where token=?", (t,))
+    db().execute("update region set ok=1 where token=?", (t,))
     return flask.redirect("/?m=ok")
 
 
 @app.route("/bye/<t>")
 def bye(t):
-    db().execute("delete from watch where token=?", (t,))
+    db().execute("delete from region where token=?", (t,))
     return flask.redirect("/?m=bye")
 
 
