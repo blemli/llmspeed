@@ -1,0 +1,74 @@
+- generic [active] [ref=e1]:
+  - navigation [ref=e3]:
+    - generic [ref=e4]:
+      - link "Skip to content" [ref=e5] [cursor=pointer]:
+        - /url: "#skip"
+      - generic [ref=e6]:
+        - link [ref=e8] [cursor=pointer]:
+          - /url: /
+          - button [ref=e9]:
+            - img "OpenRouter" [ref=e12]
+        - button "Search" [ref=e15] [cursor=pointer]:
+          - generic [ref=e17]:
+            - generic [ref=e18]: ⌘
+            - generic [ref=e19]: K
+        - generic [ref=e20]:
+          - generic [ref=e22]:
+            - link [ref=e23] [cursor=pointer]:
+              - /url: /models
+              - button "Models" [ref=e24]
+            - link [ref=e25] [cursor=pointer]:
+              - /url: /benchmarks
+              - button "Benchmarks" [ref=e26]
+            - link [ref=e28] [cursor=pointer]:
+              - /url: /chat
+              - button "Chat" [ref=e29]
+            - link [ref=e30] [cursor=pointer]:
+              - /url: /rankings
+              - button "Rankings" [ref=e31]
+            - link [ref=e32] [cursor=pointer]:
+              - /url: /apps
+              - button "Apps" [ref=e33]
+            - link [ref=e34] [cursor=pointer]:
+              - /url: /ori
+              - button "Ori" [ref=e35]
+            - link [ref=e37] [cursor=pointer]:
+              - /url: /pricing
+              - button "Pricing" [ref=e38]
+            - link [ref=e39] [cursor=pointer]:
+              - /url: /docs/quickstart
+              - button "Docs" [ref=e40]
+          - button "Sign Up" [ref=e45] [cursor=pointer]
+  - main [ref=e46]:
+    - generic:
+      - generic:
+        - heading "Chat" [level=1] [ref=e47]
+        - generic [ref=e48]:
+          - heading "About the chat playground" [level=2] [ref=e49]
+          - paragraph [ref=e50]: Compare LLMs on a single prompt with OpenRouter. Test and evaluate responses from OpenAI, Google, Anthropic, and 600+ AI models in one chat interface.
+          - paragraph [ref=e51]: Pick one or more models, send the same message to each of them, and read the answers side by side. Responses are AI-generated and can be inaccurate.
+          - navigation [ref=e52]:
+            - list [ref=e53]:
+              - listitem [ref=e54]:
+                - link "Browse all models" [ref=e55] [cursor=pointer]:
+                  - /url: /models
+              - listitem [ref=e56]:
+                - link "Model rankings" [ref=e57] [cursor=pointer]:
+                  - /url: /rankings
+              - listitem [ref=e58]:
+                - link "Compare models" [ref=e59] [cursor=pointer]:
+                  - /url: /compare
+        - generic [ref=e60]:
+          - complementary [ref=e61]
+          - paragraph [ref=e191]: Responses are AI-generated and can be inaccurate. Review all outputs before relying on them.
+  - alert [ref=e192]
+  - generic:
+    - region "Notifications"
+  - generic [ref=e194]:
+    - heading "Cookie Preferences" [level=3] [ref=e195]
+    - paragraph [ref=e196]: We use essential cookies for site functionality and optional cookies for analytics.
+    - generic [ref=e197]:
+      - link "Privacy policy" [ref=e198] [cursor=pointer]:
+        - /url: /privacy
+      - button "Decline" [ref=e199] [cursor=pointer]
+      - button "Accept" [ref=e200] [cursor=pointer]

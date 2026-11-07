@@ -1,0 +1,14 @@
+# the one example prompt behind every "try it" link
+example: "Explain in three sentences why the sky is blue, then give me one surprising fact about it."
+
+# artificial analysis slugs to show before they have an intelligence index - they sit on the x axis
+pin:
+  - celeris-1
+
+# models the sources do not measure: your own numbers. tps = output tokens/s, ii = intelligence index (omit -> on the x axis)
+extra:
+  - name: SmolLM3 3B
+    creator: Hugging Face
+    open: true
+    tps:            # fill in what your box does - the dot appears once this is set
+    url: https://huggingface.co/HuggingFaceTB/SmolLM3-3B

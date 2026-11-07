@@ -1,12 +1,12 @@
-service: llmfind
-image: blemli/llmfind
+service: llmspeed
+image: blemli/llmspeed
 servers:
   web:
     hosts:
       - 185.66.109.77
 proxy:
   ssl: true
-  host: llmfind.problem.li
+  host: llmspeed.problem.li
   app_port: 8080
 registry:
   server: localhost:5555
@@ -19,7 +19,7 @@ env:
     - SMTP_PASS
     - AA_KEY
 volumes:
-  - "llmfind_data:/data"
+  - "llmspeed_data:/data"
 builder:
   arch:
     - amd64
@@ -31,4 +31,4 @@ ssh:
 aliases:
   apps: server exec docker exec kamal-proxy kamal-proxy list
   ssh: app exec -i sh
-  refresh: app exec 'python -c "import llmfind; llmfind.refresh(force=True)"'
+  refresh: app exec 'python -c "import llmspeed; llmspeed.refresh(force=True)"'

@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>llmspeed</title><link rel="icon" href="/favicon.svg">
+<style>
+body{font:15px/1.45 -apple-system,system-ui,sans-serif;max-width:1000px;margin:1.5em auto;padding:0 1em;color:#111;background:#fff}
+h1{display:flex;align-items:center;gap:.4em;margin:.2em 0}h1 small{font-weight:400;color:#666;font-size:.6em}
+a{color:#8c1ac4}
+svg{width:100%;height:auto;border:1px solid #ddd;cursor:crosshair}svg a:hover circle{stroke:#111;stroke-width:2;fill-opacity:1}svg text{pointer-events:none}
+.k{display:flex;gap:1.2em;flex-wrap:wrap;color:#444;font-size:14px;margin:.4em 0 1em}.api{color:#e01b24}.open{color:#2a9d3f}.me{color:#fd8d33}
+form{display:flex;gap:.4em;flex-wrap:wrap;align-items:center;margin:.6em 0}input{padding:.35em .5em;border:1px solid #bbb;border-radius:0;font:inherit}
+button{padding:.4em .9em;border:0;background:#8c1ac4;color:#fff;font:inherit;cursor:pointer}small{color:#666}
+pre{white-space:pre-wrap;background:#f6f1fa;padding:.7em;border-left:4px solid #8c1ac4;margin:.4em 0}
+table{border-collapse:collapse;width:100%;font-size:13px;margin-top:.6em}th,td{padding:3px 6px;border-bottom:1px solid #eee;text-align:left;vertical-align:top}td.n,th.n{text-align:right}th{background:#f6f1fa}
+details{margin:1.2em 0}summary{cursor:pointer;font-weight:600}footer{color:#666;font-size:13px;margin:2em 0}
+</style></head><body>
+<h1><img src="/favicon.svg" width="30" alt=""> llmspeed <small>llms should run on premises</small></h1>
+<div class="k"><span><b>y</b> intelligence index</span><span><b>x</b> output tokens/s, log</span><span class="api">● api</span><span class="open">● open weights</span>{% if dots %}<span class="me">● yours</span>{% endif %}
+<span>○ no index yet</span><span>— same model, more or less reasoning</span><span>◌ new this fortnight</span></div>
+<svg viewBox="0 0 {{ W }} {{ H }}" data-x0="{{ g.x0 }}" data-x1="{{ g.x1 }}" data-y1="{{ g.y1 }}" data-l="{{ L }}" data-r="{{ W - R }}" data-t="{{ T }}" data-b="{{ H - B }}">
+{% for v, y in g.yt %}<line x1="{{ L }}" x2="{{ W - R }}" y1="{{ y }}" y2="{{ y }}" stroke="#eee"/><text x="{{ L - 6 }}" y="{{ y + 4 }}" font-size="11" text-anchor="end" fill="#666">{{ v }}</text>{% endfor %}
+{% for v, x in g.xt %}<line y1="{{ T }}" y2="{{ H - B }}" x1="{{ x }}" x2="{{ x }}" stroke="#eee"/><text y="{{ H - B + 16 }}" x="{{ x }}" font-size="11" text-anchor="middle" fill="#666">{{ v }}</text>{% endfor %}
+<text x="{{ W - R }}" y="{{ H - 4 }}" font-size="11" text-anchor="end" fill="#666">output tokens/s →</text>
+<text x="{{ L + 4 }}" y="{{ T + 10 }}" font-size="11" fill="#666">↑ intelligence index</text>
+{% if not rs %}<text x="{{ W / 2 }}" y="{{ H / 2 }}" font-size="18" text-anchor="middle" fill="#666">fetching models, reload in a minute</text>{% endif %}
+{% for c, pts in g.lines %}<polyline points="{{ pts }}" fill="none" stroke="{{ c }}" stroke-opacity=".35" stroke-width="1.5"/>
+{% endfor %}
+{% for r in rs %}<a href="{{ r.url }}" target="_blank" rel="noopener"><circle cx="{{ r.cx }}" cy="{{ r.cy }}" r="{{ r.r }}" {% if r.ii is none %}fill="#fff" stroke="{{ '#2a9d3f' if r.hf else '#e01b24' }}" stroke-width="2"{% else %}fill="{{ '#2a9d3f' if r.hf else '#e01b24' }}" fill-opacity=".55"{% if r.new %} stroke="#111" stroke-dasharray="3 2"{% endif %}{% endif %}><title>{{ r.name }} · {{ r.creator }}{% if r.hf %} · open weights{% endif %}
+{{ r.tps|round|int }} tokens/s{% if r.ii is not none %} · intelligence {{ r.ii }}{% else %} · no intelligence index yet{% endif %}{% if r.out is not none %} · ${{ '%.3g' % r.inp }} in / ${{ '%.3g' % r.out }} out per 1M{% endif %}</title></circle>{% if r.label %}<text x="{{ r.lx }}" y="{{ r.ly }}" font-size="10" fill="#333">{{ r.name }}</text>{% endif %}</a>
+{% endfor %}
+{% for d in dots %}<circle cx="{{ d.cx }}" cy="{{ d.cy }}" r="{{ d.r }}" fill="#fd8d33" fill-opacity=".85"><title>{{ d.name }} · {{ d.tps|round|int }} tokens/s · intelligence {{ d.ii }}</title></circle><text x="{{ d.lx }}" y="{{ d.ly }}" font-size="10" font-weight="bold" fill="#b35a00">{{ d.name }}</text>
+{% endfor %}
+</svg>
+<p><b>try it</b> — click a dot: the model opens on <a href="https://arena.ai/text/direct" target="_blank" rel="noopener">arena.ai</a> (or OpenRouter chat when arena does not list it) and this prompt lands in your clipboard, paste it there:</p>
+<pre id="ex">{{ cfg.example }}</pre>
+<form method="post" action="/dot"><b>draw a dot</b><input name="name" placeholder="name" maxlength="30" required size="10"><input name="ii" id="ii" type="number" min="0" max="100" step="any" placeholder="intelligence 0-100" required size="14"><input name="tps" id="tps" type="number" min="0.1" step="any" placeholder="tokens/s" required size="10"><button>draw</button>{% if dots %}<button name="clear" value="1">clear</button>{% endif %}<small>click the chart to fill in the axes. dots live in a cookie - only you see them.</small></form>
+<form method="post" action="/subscribe"><b>new model?</b><input type="email" name="email" placeholder="you@example.com" required size="24"><button>mail me</button>{% if msg %}<b>{{ msg }}</b>{% endif %}</form>
+<details><summary>all {{ rs|length }} models</summary>
+<table><tr><th>model</th><th></th><th class="n">intelligence</th><th class="n">tok/s</th><th class="n">$ in</th><th class="n">$ out</th><th>since</th><th></th></tr>
+{% for r in rs %}<tr><td><b>{{ r.name }}</b> <small>{{ r.creator }}</small></td><td class="{{ 'open' if r.hf else 'api' }}">●</td><td class="n">{{ r.ii if r.ii is not none else '' }}</td><td class="n">{{ r.tps|round|int }}</td><td class="n">{{ '%.3g' % r.inp if r.inp is not none else '' }}</td><td class="n">{{ '%.3g' % r.out if r.out is not none else '' }}</td><td>{{ r.created[:7] }}</td><td><a class="try" href="{{ r.url }}" target="_blank" rel="noopener">try</a></td></tr>
+{% endfor %}</table></details>
+<footer>data: <a href="https://artificialanalysis.ai">Artificial Analysis</a> (speed, intelligence index, prices) · <a href="https://openrouter.ai/models">OpenRouter</a> + <a href="https://huggingface.co">Hugging Face</a> (open weights) · <a href="https://arena.ai">Arena</a> (try it) · {% if age < 1e8 %}refreshed {{ (age / 3600)|round|int }} h ago{% else %}no data yet{% endif %} · <a href="https://github.com/blemli/llmspeed">source</a></footer>
+<script>
+const ex=document.getElementById('ex').textContent,svg=document.querySelector('svg'),d=svg.dataset,copy=()=>navigator.clipboard&&navigator.clipboard.writeText(ex);
+svg.onclick=e=>{if(e.target.closest('a'))return copy();const p=new DOMPoint(e.clientX,e.clientY).matrixTransform(svg.getScreenCTM().inverse());
+tps.value=Math.pow(10,+d.x0+(p.x-d.l)/(d.r-d.l)*(d.x1-d.x0)).toPrecision(3);ii.value=((d.b-p.y)/(d.b-d.t)*d.y1).toFixed(0)};
+document.querySelectorAll('a.try').forEach(a=>a.onclick=copy);
+</script>
+</body></html>
